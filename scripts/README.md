@@ -15,6 +15,10 @@ python
 - `sdf2pkl.py`: mol from .sdf to .pickle, for analysis
 `python
 
+### Patches (By Lucky)
+- `clean_smiles.py`: script to filter out reacted confs and determine the common smiles
+- `compare_confs.py`: script to calculate the metrics
+-  
 ### Conformer-Generation
 - `gen_GeoMol.py`: for smi, rdkit mol and GeoMol mol generation from pickle file (in situ validation)
 ```bash

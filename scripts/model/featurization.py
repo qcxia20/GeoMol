@@ -114,7 +114,7 @@ class geom_confs(Dataset):
 
             # skip mols with atoms with more than 4 neighbors for now
             n_neighbors = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
-            if np.max(n_neighbors) > 4: # cannot deal with atoms with degree > 4 (like 5-value P)
+            if np.max(n_neighbors) > 4: # cannot deal with atoms with degree > 4 (like 5-degree P)
                 continue
 
             # filter for conformers that may have reacted

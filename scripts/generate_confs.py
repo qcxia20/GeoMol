@@ -27,7 +27,7 @@ def pass_clash_filter(rdmol, cutoff):
     return False if ((matrix3d > 0) & (matrix3d < cutoff)).any() else True
 
 def generate_GeoMol_confs(args, testdata):
-    err_smis = []
+    err_smis, err_smis_cutoff = [], []
     trained_model_dir = args.trained_model_dir
     dataset = args.dataset
     mmff = args.mmff
@@ -42,8 +42,8 @@ def generate_GeoMol_confs(args, testdata):
     model.load_state_dict(state_dict, strict=True)
     model.eval()
     
-    conformer_dict = {}
-    for smi, n_confs in tqdm(testdata.values):
+    conformer_dict, conformer_dict_cutoff = {}, {}
+    for smi, n_confs in tqdm(testdata.values): # class 'pandas.core.frame.DataFrame'
         
         # create data object (skip smiles rdkit can't handle)
         tg_data = featurize_mol_from_smiles(smi, dataset=dataset) # Use RDKit to extract mol information first
@@ -59,7 +59,7 @@ def generate_GeoMol_confs(args, testdata):
         # set coords
         n_atoms = tg_data.x.size(0)
         model_coords = construct_conformers(data, model)
-        mols = []
+        mols, mols_cutoff = [], []
         for x in model_coords.split(1, dim=1):
             mol = Chem.AddHs(Chem.MolFromSmiles(smi)) # hydrogens will be added to generated mols first by rdkit, to ensure the same total atoms
             coords = x.squeeze(1).double().cpu().detach().numpy()
@@ -73,14 +73,21 @@ def generate_GeoMol_confs(args, testdata):
                     pass
         # filter clashed confs
             if pass_clash_filter(mol, cutoff):
-                mols.append(mol)
+                mols_cutoff.append(mol)
+            mols.append(mol)
         ######################
             # mols.append(mol)
         if len(mols):
-            conformer_dict[smi] = mols # only save smis that with cutoff > 0.7
+            conformer_dict[smi] = mols
         else:
             err_smis.append(smi)
-    return conformer_dict, err_smis
+
+        if len(mols_cutoff):
+            conformer_dict_cutoff[smi] = mols_cutoff # only save smis that with cutoff > 0.7
+        else:
+            err_smis_cutoff.append(smi)
+
+    return conformer_dict, conformer_dict_cutoff, err_smis, err_smis_cutoff
 
 
 if __name__ == "__main__":
@@ -96,7 +103,9 @@ if __name__ == "__main__":
     # parser.add_argument('--smi', type=str, help="smi for conformation generation")
     args = parser.parse_args()
     
-    setattr(args, 'smi', "CC(C)=O")
+    setattr(args, 'smi', r"Cc1cc(C(=O)c2cnc(/N=C\N(C)C)s2)c(F)cc1Cl") # cis
+    # setattr(args, 'smi', "Cc1cc(C(=O)c2cnc(/N=C/N(C)C)s2)c(F)cc1Cl") #trans
+
     # setattr(args, 'smi', "C1CCCCC1")
     
     random.seed(args.seed)
@@ -114,17 +123,21 @@ if __name__ == "__main__":
         quit()
 
     
-    conformer_dict, err_smis = generate_GeoMol_confs(args, test_data)
+    conformer_dict, conformer_dict_cutoff, err_smis, err_smis_cutoff = generate_GeoMol_confs(args, test_data)
     
     # save to file
     if args.out:
         with open(args.out, 'wb') as f:
             pickle.dump(conformer_dict, f)
+        with open(str(args.out).split(".")[0] + f"_c{args.cutoff}" + ".pickle", 'wb') as f:
+            pickle.dump(conformer_dict_cutoff, f)
     else:
         suffix = '_ff' if args.mmff else ''
         with open(f'{args.trained_model_dir}/test_mols{suffix}.pkl', 'wb') as f:
             pickle.dump(conformer_dict, f)
     
-    with open(args.out.parent / "GeoMol_err_smiles.txt", 'w') as f:
+    with open(args.out.parent / f"GeoMol_err_smiles.txt", 'w') as f:
         f.write('\n'.join(err_smis))
+    with open(args.out.parent / f"GeoMol_err_smiles_c{args.cutoff}.txt", 'w') as f:
+        f.write('\n'.join(err_smis_cutoff))
     
